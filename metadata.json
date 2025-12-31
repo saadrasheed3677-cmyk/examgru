@@ -1,0 +1,7 @@
+{
+  "name": "AceAssign AI Solver",
+  "description": "An advanced AI-powered assignment solver that extracts, classifies, and solves academic and programming problems with professional export options.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
