@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, Chat, FunctionDeclaration } from "@google/genai";
+import { GoogleGenAI, Type, Chat, FunctionDeclaration, Content } from "@google/genai";
 import { AssignmentResult, AssignmentType } from "../types";
 
 const API_KEY = process.env.API_KEY || "";
@@ -101,12 +101,13 @@ export class GeminiService {
     return response.text || "No output.";
   }
 
-  startChat(result: AssignmentResult): Chat {
+  startChat(result: AssignmentResult, history: Content[] = []): Chat {
     const model = 'gemini-3-flash-preview';
     const context = JSON.stringify(result, null, 2);
     
     return this.ai.chats.create({
       model: model,
+      history: history,
       config: {
         tools: [{ functionDeclarations: [updateAssignmentTool] }],
         systemInstruction: `You are AceAssign AI Tutor. You help students with their assignment: "${result.title}".

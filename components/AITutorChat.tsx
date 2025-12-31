@@ -1,14 +1,15 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Send, X, Loader2, Sparkles, User, Bot, Minimize2, Wrench } from 'lucide-react';
+import { MessageCircle, Send, X, Loader2, Sparkles, User, Bot, Minimize2, Wrench, Trash2, Clock, Check } from 'lucide-react';
 import { AssignmentResult, Question } from '../types';
 import { geminiService } from '../services/gemini';
-import { Chat, GenerateContentResponse } from '@google/genai';
+import { Chat, GenerateContentResponse, Content } from '@google/genai';
 
 interface Message {
   role: 'user' | 'model';
   text: string;
   isSystem?: boolean;
+  timestamp: number;
 }
 
 interface AITutorChatProps {
@@ -19,39 +20,80 @@ interface AITutorChatProps {
 const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'model', text: `Hi! I'm your AI Tutor. I can explain these solutions or even edit them for you if you ask! How can I help?` }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatSession, setChatSession] = useState<Chat | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const storageKey = `aceassign_chat_${result.title.replace(/\s+/g, '_').toLowerCase()}`;
+
+  useEffect(() => {
+    const saved = localStorage.getItem(storageKey);
+    if (saved) {
+      try {
+        setMessages(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse saved chat", e);
+      }
+    } else {
+      setMessages([
+        { 
+          role: 'model', 
+          text: `Hi! I'm your AI Tutor. I can explain these solutions or even edit them for you if you ask! How can I help?`,
+          timestamp: Date.now()
+        }
+      ]);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      localStorage.setItem(storageKey, JSON.stringify(messages));
+    }
+  }, [messages, storageKey]);
+
   useEffect(() => {
     if (isOpen && !chatSession) {
-      setChatSession(geminiService.startChat(result));
+      const history: Content[] = messages
+        .filter(m => !m.isSystem)
+        .map(m => ({
+          role: m.role,
+          parts: [{ text: m.text }]
+        }));
+
+      setChatSession(geminiService.startChat(result, history));
     }
-  }, [isOpen, result, chatSession]);
+  }, [isOpen, result, chatSession, messages]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, isOpen]);
+
+  const clearHistory = () => {
+    if (window.confirm("Clear all chat history for this assignment?")) {
+      localStorage.removeItem(storageKey);
+      setMessages([{ 
+        role: 'model', 
+        text: `Chat cleared. How else can I help with "${result.title}"?`,
+        timestamp: Date.now()
+      }]);
+      setChatSession(null); 
+    }
+  };
 
   const handleSend = async () => {
     if (!input.trim() || !chatSession || isLoading) return;
 
     const userMessage = input.trim();
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', text: userMessage }]);
+    setMessages(prev => [...prev, { role: 'user', text: userMessage, timestamp: Date.now() }]);
     setIsLoading(true);
 
     try {
-      let responseStream = await chatSession.sendMessageStream({ message: userMessage });
       let fullText = '';
       
-      setMessages(prev => [...prev, { role: 'model', text: '' }]);
-
       const processStream = async (stream: any) => {
         let calls: any[] = [];
         for await (const chunk of stream) {
@@ -67,8 +109,11 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             setMessages(prev => {
               const newMessages = [...prev];
               const lastMsg = newMessages[newMessages.length - 1];
-              if (lastMsg.role === 'model' && !lastMsg.isSystem) {
-                newMessages[newMessages.length - 1] = { role: 'model', text: fullText };
+              // Ensure we are updating the active model message and not a system one
+              if (lastMsg && lastMsg.role === 'model' && !lastMsg.isSystem) {
+                newMessages[newMessages.length - 1] = { ...lastMsg, text: fullText };
+              } else {
+                newMessages.push({ role: 'model', text: fullText, timestamp: Date.now() });
               }
               return newMessages;
             });
@@ -77,23 +122,30 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
         return calls;
       };
 
-      const toolCalls = await processStream(responseStream);
+      const initialStream = await chatSession.sendMessageStream({ message: userMessage });
+      const toolCalls = await processStream(initialStream);
 
       if (toolCalls.length > 0) {
+        let updateSummary = "";
         const functionResponses = toolCalls.map(fc => {
           if (fc.name === 'update_assignment_content') {
             const args = fc.args as any;
             
-            // Apply updates to the state
             setResult(prev => {
               if (!prev) return null;
               let updatedQuestions = [...prev.questions];
               
-              if (args.questions) {
+              if (args.questions && Array.isArray(args.questions)) {
                 updatedQuestions = updatedQuestions.map(q => {
-                  const update = args.questions.find((u: any) => u.id === q.id);
+                  // Use robust ID matching (string comparison)
+                  const update = args.questions.find((u: any) => String(u.id) === String(q.id));
                   return update ? { ...q, ...update } : q;
                 });
+                updateSummary += `Modified ${args.questions.length} question(s). `;
+              }
+
+              if (args.title) {
+                updateSummary += "Updated title. ";
               }
 
               return {
@@ -107,7 +159,10 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
               functionResponse: {
                 id: fc.id,
                 name: fc.name,
-                response: { result: "Content updated successfully on user screen." }
+                response: { 
+                  status: "success", 
+                  message: "The document has been updated and the user can see the changes." 
+                }
               }
             };
           }
@@ -115,29 +170,39 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             functionResponse: {
               id: fc.id,
               name: fc.name,
-              response: { error: "Unknown function called" }
+              response: { error: "Unknown function" }
             }
           };
         });
 
-        // Add visual confirmation in chat
-        setMessages(prev => [...prev, { role: 'model', text: "✨ I've updated the assignment content based on your request!", isSystem: true }]);
+        // Add distinct system confirmation message
+        setMessages(prev => [...prev, { 
+          role: 'model', 
+          text: `✨ Content Updated: ${updateSummary || 'Applied requested changes.'}`, 
+          isSystem: true,
+          timestamp: Date.now()
+        }]);
         
-        // Reset full text for the follow-up confirmation from the AI
+        // Reset text accumulator for the model's follow-up explanation
         fullText = '';
-        setMessages(prev => [...prev, { role: 'model', text: '' }]);
-        
-        // Send the function responses back to the model to complete the turn
         const followUpStream = await chatSession.sendMessageStream({ message: functionResponses });
         await processStream(followUpStream);
       }
 
     } catch (error) {
       console.error("Chat error:", error);
-      setMessages(prev => [...prev, { role: 'model', text: "Sorry, I hit a snag. Try again?" }]);
+      setMessages(prev => [...prev, { 
+        role: 'model', 
+        text: "I encountered an error trying to process that. Please try rephrasing your request.",
+        timestamp: Date.now()
+      }]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const formatTime = (ts: number) => {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   if (!isOpen) {
@@ -146,9 +211,16 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
         onClick={() => setIsOpen(true)}
         className="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-2xl hover:bg-blue-700 transition-all z-50 flex items-center gap-2 group no-print"
       >
-        <Sparkles size={24} className="animate-pulse" />
+        <div className="relative">
+          <Sparkles size={24} className="animate-pulse" />
+          {messages.length > 1 && (
+            <span className="absolute -top-2 -right-2 bg-red-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
+              {messages.length - 1}
+            </span>
+          )}
+        </div>
         <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 font-bold px-0 group-hover:px-2">
-          AI Smart Edit
+          AI Tutor
         </span>
       </button>
     );
@@ -163,53 +235,67 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             <Bot size={20} />
           </div>
           <div>
-            <h3 className="font-bold text-sm">AI Tutor & Editor</h3>
+            <h3 className="font-bold text-sm">AI Tutor Session</h3>
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-[10px] font-medium opacity-80 uppercase tracking-widest">Active Session</span>
+              <span className="text-[10px] font-medium opacity-80 uppercase tracking-widest">Live Document Sync</span>
             </div>
           </div>
         </div>
-        <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-2 rounded-xl transition-colors">
-          <Minimize2 size={20} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={clearHistory}
+            className="hover:bg-white/10 p-2 rounded-xl transition-colors"
+            title="Clear Chat History"
+          >
+            <Trash2 size={18} />
+          </button>
+          <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-2 rounded-xl transition-colors">
+            <Minimize2 size={20} />
+          </button>
+        </div>
       </div>
 
       {/* Messages */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-5 space-y-5 bg-slate-50/50"
+        className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-50/50"
       >
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+          <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
             {msg.isSystem ? (
                <div className="w-full flex justify-center py-2">
-                  <div className="bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-xs font-bold border border-blue-100 flex items-center gap-2">
-                    <Wrench size={12} /> {msg.text}
+                  <div className="bg-emerald-50 text-emerald-700 px-4 py-1.5 rounded-full text-[10px] font-bold border border-emerald-100 flex items-center gap-2 shadow-sm">
+                    <Check size={12} className="text-emerald-500" /> {msg.text}
                   </div>
                </div>
             ) : (
               <div className={`flex gap-3 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-sm ${
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm mt-auto ${
                   msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-blue-600 border'
                 }`}>
-                  {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
+                  {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
                 </div>
-                <div className={`p-4 rounded-[1.5rem] text-sm leading-relaxed shadow-sm ${
-                  msg.role === 'user' 
-                  ? 'bg-indigo-600 text-white rounded-tr-none' 
-                  : 'bg-white border-blue-50 border rounded-tl-none text-slate-700'
-                }`}>
-                  {msg.text || (isLoading && i === messages.length - 1 ? <Loader2 size={18} className="animate-spin text-blue-400" /> : null)}
+                <div className="flex flex-col gap-1">
+                  <div className={`p-4 rounded-[1.5rem] text-sm leading-relaxed shadow-sm ${
+                    msg.role === 'user' 
+                    ? 'bg-indigo-600 text-white rounded-tr-none' 
+                    : 'bg-white border-blue-50 border rounded-tl-none text-slate-700'
+                  }`}>
+                    {msg.text || (isLoading && i === messages.length - 1 ? <Loader2 size={18} className="animate-spin text-blue-400" /> : null)}
+                  </div>
+                  <div className={`flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter ${msg.role === 'user' ? 'justify-end pr-1' : 'justify-start pl-1'}`}>
+                    <Clock size={8} /> {formatTime(msg.timestamp)}
+                  </div>
                 </div>
               </div>
             )}
           </div>
         ))}
-        {isLoading && messages[messages.length-1].role === 'user' && (
+        {isLoading && messages.length > 0 && messages[messages.length-1].role === 'user' && (
           <div className="flex justify-start ml-12">
-             <div className="flex gap-2 items-center text-blue-400 text-xs font-bold bg-white px-3 py-1.5 rounded-full border border-blue-50 shadow-sm">
-                <Loader2 size={14} className="animate-spin" /> Analyzing your request...
+             <div className="flex gap-2 items-center text-blue-400 text-[10px] font-bold bg-white px-3 py-1.5 rounded-full border border-blue-50 shadow-sm uppercase tracking-widest">
+                <Loader2 size={14} className="animate-spin" /> Analyzing Document...
              </div>
           </div>
         )}
@@ -218,7 +304,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
       {/* Input Area */}
       <div className="p-5 border-t bg-white">
         <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar py-1">
-           {['Rewrite Q1 simply', 'Make Q2 explanation shorter', 'Change title', 'Add more code comments'].map(pill => (
+           {['Summarize the solution', 'Explain Q1 like I\'m five', 'Make everything formal', 'Check for errors'].map(pill => (
              <button 
                key={pill}
                onClick={() => setInput(pill)}
@@ -233,7 +319,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Tell me what to change..."
+            placeholder="Ask a question or request an edit..."
             className="w-full pl-5 pr-14 py-4 bg-slate-100/50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white border-2 border-transparent focus:border-blue-100 transition-all"
           />
           <button
@@ -246,9 +332,6 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             <Send size={20} />
           </button>
         </div>
-        <p className="text-[10px] text-center text-slate-400 mt-3 font-medium uppercase tracking-widest">
-          AI can modify the document based on your prompts
-        </p>
       </div>
     </div>
   );
