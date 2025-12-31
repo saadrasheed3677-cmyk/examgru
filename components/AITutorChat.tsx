@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, Send, X, Loader2, Sparkles, User, Bot, Minimize2, Wrench, Trash2, Clock, Check } from 'lucide-react';
+import { Send, Loader2, Sparkles, User, Bot, Minimize2, Trash2, Clock, Check, Zap, MessageSquare, Info } from 'lucide-react';
 import { AssignmentResult, Question } from '../types';
 import { geminiService } from '../services/gemini';
 import { Chat, GenerateContentResponse, Content } from '@google/genai';
@@ -39,7 +39,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
       setMessages([
         { 
           role: 'model', 
-          text: `Hi! I'm your AI Tutor. I can explain these solutions or even edit them for you if you ask! How can I help?`,
+          text: `Hi! I'm your AI Tutor. I'm connected to your live document. I can help you explain these concepts, verify the code, or even edit the solutions for you. How can I help?`,
           timestamp: Date.now()
         }
       ]);
@@ -67,7 +67,10 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
     }
   }, [messages, isLoading, isOpen]);
 
@@ -76,7 +79,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
       localStorage.removeItem(storageKey);
       setMessages([{ 
         role: 'model', 
-        text: `Chat cleared. How else can I help with "${result.title}"?`,
+        text: `History cleared. Your document state is preserved. What's next?`,
         timestamp: Date.now()
       }]);
       setChatSession(null); 
@@ -109,7 +112,6 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             setMessages(prev => {
               const newMessages = [...prev];
               const lastMsg = newMessages[newMessages.length - 1];
-              // Ensure we are updating the active model message and not a system one
               if (lastMsg && lastMsg.role === 'model' && !lastMsg.isSystem) {
                 newMessages[newMessages.length - 1] = { ...lastMsg, text: fullText };
               } else {
@@ -137,7 +139,6 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
               
               if (args.questions && Array.isArray(args.questions)) {
                 updatedQuestions = updatedQuestions.map(q => {
-                  // Use robust ID matching (string comparison)
                   const update = args.questions.find((u: any) => String(u.id) === String(q.id));
                   return update ? { ...q, ...update } : q;
                 });
@@ -161,7 +162,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
                 name: fc.name,
                 response: { 
                   status: "success", 
-                  message: "The document has been updated and the user can see the changes." 
+                  message: "Content updated live." 
                 }
               }
             };
@@ -175,15 +176,13 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
           };
         });
 
-        // Add distinct system confirmation message
         setMessages(prev => [...prev, { 
           role: 'model', 
-          text: `✨ Content Updated: ${updateSummary || 'Applied requested changes.'}`, 
+          text: `✨ Applied changes: ${updateSummary || 'Updated content.'}`, 
           isSystem: true,
           timestamp: Date.now()
         }]);
         
-        // Reset text accumulator for the model's follow-up explanation
         fullText = '';
         const followUpStream = await chatSession.sendMessageStream({ message: functionResponses });
         await processStream(followUpStream);
@@ -193,7 +192,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
       console.error("Chat error:", error);
       setMessages(prev => [...prev, { 
         role: 'model', 
-        text: "I encountered an error trying to process that. Please try rephrasing your request.",
+        text: "I encountered a minor issue. Could you try rephrasing that?",
         timestamp: Date.now()
       }]);
     } finally {
@@ -209,82 +208,99 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 bg-blue-600 text-white p-4 rounded-full shadow-2xl hover:bg-blue-700 transition-all z-50 flex items-center gap-2 group no-print"
+        className="fixed bottom-8 right-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-5 rounded-[2rem] shadow-2xl hover:scale-105 active:scale-95 transition-all z-50 flex items-center gap-3 group no-print border-4 border-white"
       >
         <div className="relative">
-          <Sparkles size={24} className="animate-pulse" />
-          {messages.length > 1 && (
-            <span className="absolute -top-2 -right-2 bg-red-500 text-[10px] font-bold px-1.5 py-0.5 rounded-full border-2 border-white">
-              {messages.length - 1}
-            </span>
-          )}
+          <Zap size={28} className="fill-white" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 bg-green-400 rounded-full border-2 border-white animate-pulse" />
         </div>
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-300 font-bold px-0 group-hover:px-2">
-          AI Tutor
-        </span>
+        <div className="flex flex-col items-start pr-2">
+           <span className="text-sm font-bold tracking-tight">AI Assistant</span>
+           <span className="text-[10px] opacity-80 font-medium">Ready to edit live</span>
+        </div>
       </button>
     );
   }
 
   return (
-    <div className="fixed bottom-6 right-6 w-[420px] h-[650px] bg-white rounded-3xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] border-2 border-blue-50 flex flex-col z-50 overflow-hidden animate-in slide-in-from-bottom-8 no-print">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 p-5 text-white flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
-            <Bot size={20} />
+    <div className="fixed bottom-8 right-8 w-[440px] h-[700px] bg-[#fdfdfd] rounded-[2.5rem] shadow-[0_24px_80px_-16px_rgba(0,0,0,0.25)] border border-slate-200 flex flex-col z-50 overflow-hidden animate-in slide-in-from-bottom-12 fade-in duration-500 no-print">
+      {/* Premium Header */}
+      <div className="bg-white border-b border-slate-100 p-6 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
+            <Bot size={26} />
           </div>
-          <div>
-            <h3 className="font-bold text-sm">AI Tutor Session</h3>
+          <div className="flex flex-col">
+            <h3 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+              AceAssign Tutor
+              <span className="bg-blue-50 text-blue-600 text-[9px] font-black uppercase px-2 py-0.5 rounded-full border border-blue-100">Live</span>
+            </h3>
             <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              <span className="text-[10px] font-medium opacity-80 uppercase tracking-widest">Live Document Sync</span>
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              <span className="text-[11px] text-slate-400 font-semibold">Active & Connected</span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <button 
             onClick={clearHistory}
-            className="hover:bg-white/10 p-2 rounded-xl transition-colors"
-            title="Clear Chat History"
+            className="hover:bg-red-50 hover:text-red-500 p-2.5 rounded-xl transition-all text-slate-400"
+            title="Clear Chat"
           >
             <Trash2 size={18} />
           </button>
-          <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-2 rounded-xl transition-colors">
+          <button 
+            onClick={() => setIsOpen(false)} 
+            className="hover:bg-slate-100 p-2.5 rounded-xl transition-all text-slate-400"
+          >
             <Minimize2 size={20} />
           </button>
         </div>
       </div>
 
-      {/* Messages */}
+      {/* Modern Messages Layout */}
       <div 
         ref={scrollRef}
-        className="flex-1 overflow-y-auto p-5 space-y-6 bg-slate-50/50"
+        className="flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth bg-[#f8fafc]/50 no-scrollbar"
       >
+        <div className="flex justify-center mb-8">
+           <div className="bg-slate-100/50 backdrop-blur-sm px-4 py-2 rounded-2xl border border-slate-200 flex items-center gap-2">
+              <Info size={14} className="text-slate-400" />
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Conversation started on {new Date().toLocaleDateString()}</span>
+           </div>
+        </div>
+
         {messages.map((msg, i) => (
-          <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2`}>
+          <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-4 duration-300`}>
             {msg.isSystem ? (
-               <div className="w-full flex justify-center py-2">
-                  <div className="bg-emerald-50 text-emerald-700 px-4 py-1.5 rounded-full text-[10px] font-bold border border-emerald-100 flex items-center gap-2 shadow-sm">
-                    <Check size={12} className="text-emerald-500" /> {msg.text}
+               <div className="w-full flex justify-center py-4">
+                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-700 px-5 py-2.5 rounded-2xl text-xs font-bold border border-emerald-100 flex items-center gap-3 shadow-sm">
+                    <div className="bg-emerald-500 text-white p-1 rounded-full"><Check size={12} strokeWidth={4} /></div>
+                    {msg.text}
                   </div>
                </div>
             ) : (
-              <div className={`flex gap-3 max-w-[88%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm mt-auto ${
-                  msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-blue-600 border'
+              <div className={`flex gap-3 max-w-[90%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 shadow-md mt-auto mb-1 ${
+                  msg.role === 'user' ? 'bg-indigo-600 text-white' : 'bg-white text-blue-600 border border-slate-100'
                 }`}>
-                  {msg.role === 'user' ? <User size={16} /> : <Bot size={16} />}
+                  {msg.role === 'user' ? <User size={20} /> : <Zap size={20} className="fill-blue-600" />}
                 </div>
-                <div className="flex flex-col gap-1">
-                  <div className={`p-4 rounded-[1.5rem] text-sm leading-relaxed shadow-sm ${
+                <div className="flex flex-col gap-1.5">
+                  <div className={`p-5 rounded-3xl text-[13.5px] leading-[1.6] shadow-sm ${
                     msg.role === 'user' 
-                    ? 'bg-indigo-600 text-white rounded-tr-none' 
-                    : 'bg-white border-blue-50 border rounded-tl-none text-slate-700'
+                    ? 'bg-gradient-to-br from-indigo-600 to-blue-700 text-white rounded-br-none font-medium' 
+                    : 'bg-white border-slate-200 border rounded-tl-none text-slate-700 font-normal ring-1 ring-slate-100/50'
                   }`}>
-                    {msg.text || (isLoading && i === messages.length - 1 ? <Loader2 size={18} className="animate-spin text-blue-400" /> : null)}
+                    {msg.text || (isLoading && i === messages.length - 1 ? (
+                      <div className="flex gap-1.5 py-1">
+                        <div className="w-1.5 h-1.5 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <div className="w-1.5 h-1.5 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <div className="w-1.5 h-1.5 bg-blue-300 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    ) : null)}
                   </div>
-                  <div className={`flex items-center gap-1 text-[9px] text-slate-400 font-bold uppercase tracking-tighter ${msg.role === 'user' ? 'justify-end pr-1' : 'justify-start pl-1'}`}>
+                  <div className={`flex items-center gap-1.5 text-[9px] text-slate-400 font-bold uppercase tracking-tighter ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                     <Clock size={8} /> {formatTime(msg.timestamp)}
                   </div>
                 </div>
@@ -293,45 +309,54 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
           </div>
         ))}
         {isLoading && messages.length > 0 && messages[messages.length-1].role === 'user' && (
-          <div className="flex justify-start ml-12">
-             <div className="flex gap-2 items-center text-blue-400 text-[10px] font-bold bg-white px-3 py-1.5 rounded-full border border-blue-50 shadow-sm uppercase tracking-widest">
-                <Loader2 size={14} className="animate-spin" /> Analyzing Document...
+          <div className="flex justify-start ml-14">
+             <div className="flex gap-2.5 items-center text-blue-600 text-[10px] font-black bg-blue-50/80 backdrop-blur-md px-4 py-2 rounded-2xl border border-blue-100 shadow-sm uppercase tracking-widest">
+                <Loader2 size={14} className="animate-spin" /> Thinking...
              </div>
           </div>
         )}
       </div>
 
-      {/* Input Area */}
-      <div className="p-5 border-t bg-white">
-        <div className="flex gap-2 mb-3 overflow-x-auto no-scrollbar py-1">
-           {['Summarize the solution', 'Explain Q1 like I\'m five', 'Make everything formal', 'Check for errors'].map(pill => (
+      {/* Enhanced Input Area */}
+      <div className="p-6 bg-white border-t border-slate-100 space-y-4">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+           {['Rewrite simply', 'Add comments to code', 'Check math steps', 'Summarize key points'].map(pill => (
              <button 
                key={pill}
                onClick={() => setInput(pill)}
-               className="text-[10px] whitespace-nowrap bg-slate-50 hover:bg-blue-600 hover:text-white px-3 py-1.5 rounded-xl border border-slate-100 transition-all font-bold text-slate-500 shadow-sm"
+               className="text-[11px] whitespace-nowrap bg-white hover:bg-blue-600 hover:text-white px-4 py-2 rounded-2xl border border-slate-200 transition-all font-bold text-slate-600 shadow-sm flex items-center gap-1.5 group"
              >
+               <Sparkles size={12} className="group-hover:text-white text-blue-500" />
                {pill}
              </button>
            ))}
         </div>
-        <div className="relative group">
+        <div className="relative flex items-center group">
+          <div className="absolute left-4 text-slate-300 pointer-events-none group-focus-within:text-blue-500 transition-colors">
+             <MessageSquare size={20} />
+          </div>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-            placeholder="Ask a question or request an edit..."
-            className="w-full pl-5 pr-14 py-4 bg-slate-100/50 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white border-2 border-transparent focus:border-blue-100 transition-all"
+            placeholder="Type a request (e.g. 'Improve Q2 answer')"
+            className="w-full pl-12 pr-16 py-4.5 bg-slate-50/50 rounded-[1.5rem] text-sm font-medium focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:bg-white border-2 border-transparent focus:border-blue-100 transition-all text-slate-800 placeholder:text-slate-400"
           />
           <button
             onClick={handleSend}
             disabled={!input.trim() || isLoading}
-            className={`absolute right-2 top-1/2 -translate-y-1/2 p-2.5 rounded-xl transition-all ${
-              input.trim() && !isLoading ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-200' : 'bg-slate-200 text-slate-400'
+            className={`absolute right-2 p-3 rounded-2xl transition-all ${
+              input.trim() && !isLoading 
+              ? 'bg-gradient-to-br from-blue-600 to-indigo-700 text-white hover:scale-105 active:scale-95 shadow-xl shadow-blue-200' 
+              : 'bg-slate-100 text-slate-300'
             }`}
           >
-            <Send size={20} />
+            <Send size={22} strokeWidth={2.5} />
           </button>
         </div>
+        <p className="text-center text-[9px] text-slate-300 font-bold uppercase tracking-widest pt-1">
+           Encrypted • Contextual Intelligence Enabled
+        </p>
       </div>
     </div>
   );

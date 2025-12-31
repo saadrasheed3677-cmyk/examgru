@@ -35,13 +35,42 @@
             background-image: linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
         }
 
+        /* Custom Scrollbar */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #cbd5e1;
+        }
+
+        /* Input padding helper */
+        .py-4\.5 {
+            padding-top: 1.125rem;
+            padding-bottom: 1.125rem;
+        }
+
         /* Print styles for PDF export */
         @media print {
             body {
                 background-color: white !important;
                 color: black !important;
             }
-            nav, .sticky, button, .no-print, footer, .template-selector {
+            nav, .sticky, button, .no-print, footer, .template-selector, .fixed {
                 display: none !important;
             }
             .max-w-4xl {
@@ -49,24 +78,24 @@
                 margin: 0 !important;
                 padding: 0 !important;
             }
-            .shadow-sm, .shadow-lg, .border {
+            .shadow-sm, .shadow-lg, .border, .shadow-2xl, .shadow-xl {
                 box-shadow: none !important;
                 border: none !important;
             }
-            .bg-white, .bg-gray-50, .bg-blue-50, .bg-blueprint, .bg-grid {
+            .bg-white, .bg-gray-50, .bg-blue-50, .bg-blueprint, .bg-grid, .bg-slate-50 {
                 background-color: white !important;
                 background-image: none !important;
             }
-            .p-10 {
+            .p-10, .p-8, .md\:p-12 {
                 padding: 0 !important;
             }
-            .rounded-3xl, .rounded-2xl {
+            .rounded-3xl, .rounded-2xl, .rounded-xl, .rounded-\[2\.5rem\] {
                 border-radius: 0 !important;
             }
             .animate-in {
                 animation: none !important;
             }
-            pre {
+            pre, textarea {
                 white-space: pre-wrap !important;
                 word-wrap: break-word !important;
                 background-color: #f3f4f6 !important;
@@ -80,8 +109,6 @@
             .text-blue-600, .text-indigo-700, .text-green-400 {
                 color: black !important;
             }
-            .blueprint-text { color: black !important; }
-            .terminal-text { color: black !important; }
         }
     </style>
 <script type="importmap">
