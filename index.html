@@ -8,7 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Caveat:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -20,13 +20,28 @@
         .font-handwritten {
             font-family: 'Caveat', cursive;
         }
+        .font-serif {
+            font-family: 'Playfair Display', serif;
+        }
+
+        /* Template Backgrounds */
+        .bg-grid {
+            background-size: 30px 30px;
+            background-image: linear-gradient(to right, #e5e7eb 1px, transparent 1px), linear-gradient(to bottom, #e5e7eb 1px, transparent 1px);
+        }
+        .bg-blueprint {
+            background-color: #1e3a8a;
+            background-size: 20px 20px;
+            background-image: linear-gradient(to right, rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.05) 1px, transparent 1px);
+        }
 
         /* Print styles for PDF export */
         @media print {
             body {
                 background-color: white !important;
+                color: black !important;
             }
-            nav, .sticky, button, .no-print, footer {
+            nav, .sticky, button, .no-print, footer, .template-selector {
                 display: none !important;
             }
             .max-w-4xl {
@@ -38,8 +53,9 @@
                 box-shadow: none !important;
                 border: none !important;
             }
-            .bg-white {
-                background-color: transparent !important;
+            .bg-white, .bg-gray-50, .bg-blue-50, .bg-blueprint, .bg-grid {
+                background-color: white !important;
+                background-image: none !important;
             }
             .p-10 {
                 padding: 0 !important;
@@ -59,10 +75,13 @@
             }
             code {
                 color: black !important;
+                background: #f1f5f9 !important;
             }
-            .text-blue-600 {
-                color: #2563eb !important;
+            .text-blue-600, .text-indigo-700, .text-green-400 {
+                color: black !important;
             }
+            .blueprint-text { color: black !important; }
+            .terminal-text { color: black !important; }
         }
     </style>
 <script type="importmap">

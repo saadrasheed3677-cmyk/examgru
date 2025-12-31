@@ -1,8 +1,36 @@
 
-import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { GoogleGenAI, Type, Chat, FunctionDeclaration } from "@google/genai";
 import { AssignmentResult, AssignmentType } from "../types";
 
 const API_KEY = process.env.API_KEY || "";
+
+// Define the tool for editing the assignment
+const updateAssignmentTool: FunctionDeclaration = {
+  name: 'update_assignment_content',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Update specific parts of the assignment content like questions, explanations, or solutions based on user feedback.',
+    properties: {
+      questions: {
+        type: Type.ARRAY,
+        description: 'An array of question objects containing the updated fields. You only need to provide the ID and the fields that changed.',
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: { type: Type.STRING, description: 'The unique ID of the question to update.' },
+            question_text: { type: Type.STRING, description: 'The updated text for the question.' },
+            explanation: { type: Type.STRING, description: 'The updated step-by-step explanation.' },
+            solution: { type: Type.STRING, description: 'The updated final answer/solution.' },
+            code: { type: Type.STRING, description: 'The updated code block.' },
+            language: { type: Type.STRING, description: 'The programming language for the code.' }
+          },
+          required: ['id']
+        }
+      },
+      title: { type: Type.STRING, description: 'Updated title for the entire assignment.' }
+    }
+  }
+};
 
 export class GeminiService {
   private ai: GoogleGenAI;
@@ -26,7 +54,7 @@ export class GeminiService {
               }
             },
             {
-              text: "Act as an expert academic professor. Extract all questions from this document. Solve them with detailed step-by-step explanations. IMPORTANT: Use standard Markdown backticks (e.g. `variableName` or `function()`) for any inline code snippets, keywords, or mathematical expressions within your explanations and solutions. For coding questions, provide clean, commented code in the separate code field. Classify the assignment as 'theory', 'coding', or 'mixed'. Return the data in the following JSON format."
+              text: "Act as an expert academic professor. Extract all questions from this document. Solve them with detailed step-by-step explanations. IMPORTANT: Use standard Markdown backticks for code/math. Classify as 'theory', 'coding', or 'mixed'. Return the data in JSON."
             }
           ]
         }
@@ -68,9 +96,9 @@ export class GeminiService {
     const model = 'gemini-3-flash-preview';
     const response = await this.ai.models.generateContent({
       model: model,
-      contents: `Simulate the execution output of the following ${language} code. Only provide the terminal output, no extra text:\n\n${code}`,
+      contents: `Simulate terminal output for ${language}:\n\n${code}`,
     });
-    return response.text || "Execution completed with no output.";
+    return response.text || "No output.";
   }
 
   startChat(result: AssignmentResult): Chat {
@@ -80,12 +108,14 @@ export class GeminiService {
     return this.ai.chats.create({
       model: model,
       config: {
-        systemInstruction: `You are AceAssign AI Tutor. You are helping a student with their assignment titled "${result.title}". 
-        The full assignment content is provided below in JSON format. 
-        Use this context to answer questions, explain concepts further, provide alternative solutions, or help with related practice problems.
-        Always be encouraging, academic, and clear.
-        Use markdown for formatting. 
-        Context: ${context}`
+        tools: [{ functionDeclarations: [updateAssignmentTool] }],
+        systemInstruction: `You are AceAssign AI Tutor. You help students with their assignment: "${result.title}".
+        CONTEXT: ${context}
+        
+        CAPABILITY: You can directly edit the assignment solution on the screen! 
+        If the user asks to change, simplify, rewrite, or correct any part of the solution, use the 'update_assignment_content' tool to apply those changes immediately. 
+        Always explain what you've changed to the student after using the tool.
+        If they ask for a general explanation without asking for an edit, just chat normally.`
       }
     });
   }
