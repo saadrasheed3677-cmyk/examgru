@@ -5,6 +5,13 @@ export enum AssignmentType {
   MIXED = 'mixed'
 }
 
+export interface QuestionAsset {
+  id: string;
+  type: 'image';
+  url: string;
+  caption?: string;
+}
+
 export interface Question {
   id: string;
   question_text: string;
@@ -14,6 +21,7 @@ export interface Question {
   code?: string;
   execution_output?: string;
   explanation: string;
+  assets?: QuestionAsset[];
 }
 
 export interface AssignmentResult {

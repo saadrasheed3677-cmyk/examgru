@@ -15,9 +15,11 @@ interface Message {
 interface AITutorChatProps {
   result: AssignmentResult;
   setResult: React.Dispatch<React.SetStateAction<AssignmentResult | null>>;
+  forceOpen?: boolean;
+  onClose?: () => void;
 }
 
-const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
+const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult, forceOpen, onClose }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -26,6 +28,11 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const storageKey = `aceassign_chat_${result.title.replace(/\s+/g, '_').toLowerCase()}`;
+
+  // Sync with external forceOpen prop
+  useEffect(() => {
+    if (forceOpen) setIsOpen(true);
+  }, [forceOpen]);
 
   useEffect(() => {
     const saved = localStorage.getItem(storageKey);
@@ -74,7 +81,8 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
     }
   }, [messages, isLoading, isOpen]);
 
-  const clearHistory = () => {
+  const clearHistory = (e: React.MouseEvent) => {
+    e.stopPropagation();
     if (window.confirm("Clear all chat history for this assignment?")) {
       localStorage.removeItem(storageKey);
       setMessages([{ 
@@ -84,6 +92,12 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
       }]);
       setChatSession(null); 
     }
+  };
+
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsOpen(false);
+    if (onClose) onClose();
   };
 
   const handleSend = async () => {
@@ -208,7 +222,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
     return (
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-8 right-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-5 rounded-[2rem] shadow-2xl hover:scale-105 active:scale-95 transition-all z-50 flex items-center gap-3 group no-print border-4 border-white"
+        className="fixed bottom-8 right-8 bg-gradient-to-br from-blue-600 to-indigo-700 text-white p-5 rounded-[2rem] shadow-2xl hover:scale-105 active:scale-95 transition-all z-[9999] flex items-center gap-3 group no-print border-4 border-white"
       >
         <div className="relative">
           <Zap size={28} className="fill-white" />
@@ -223,7 +237,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
   }
 
   return (
-    <div className="fixed bottom-8 right-8 w-[440px] h-[700px] bg-[#fdfdfd] rounded-[2.5rem] shadow-[0_24px_80px_-16px_rgba(0,0,0,0.25)] border border-slate-200 flex flex-col z-50 overflow-hidden animate-in slide-in-from-bottom-12 fade-in duration-500 no-print">
+    <div className="fixed bottom-8 right-8 w-[440px] h-[700px] bg-[#fdfdfd] rounded-[2.5rem] shadow-[0_24px_80px_-16px_rgba(0,0,0,0.25)] border border-slate-200 flex flex-col z-[10000] overflow-hidden animate-in slide-in-from-bottom-12 fade-in duration-500 no-print">
       {/* Premium Header */}
       <div className="bg-white border-b border-slate-100 p-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -250,7 +264,7 @@ const AITutorChat: React.FC<AITutorChatProps> = ({ result, setResult }) => {
             <Trash2 size={18} />
           </button>
           <button 
-            onClick={() => setIsOpen(false)} 
+            onClick={handleClose} 
             className="hover:bg-slate-100 p-2.5 rounded-xl transition-all text-slate-400"
           >
             <Minimize2 size={20} />
